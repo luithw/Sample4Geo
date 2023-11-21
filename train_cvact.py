@@ -3,6 +3,8 @@ import time
 import math
 import shutil
 import sys
+from multiprocessing.dummy import Namespace
+
 import torch
 import pickle
 from dataclasses import dataclass
@@ -10,6 +12,8 @@ from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader
 from transformers import get_constant_schedule_with_warmup, get_polynomial_decay_schedule_with_warmup, get_cosine_schedule_with_warmup
 
+from comingdowntoearth.networks.c_gan import define_G, define_D, define_R
+from comingdowntoearth.utils import rgan_wrapper_cvact
 from sample4geo.dataset.cvact import CVACTDatasetTrain, CVACTDatasetEval, CVACTDatasetTest
 from sample4geo.transforms import get_transforms_train, get_transforms_val
 from sample4geo.utils import setup_system, Logger
@@ -30,13 +34,14 @@ class Configuration:
     
     # Training 
     mixed_precision: bool = True
+    # mixed_precision: bool = False
+
     seed = 1
     epochs: int = 40
     batch_size: int = 128          # keep in mind real_batch_size = 2 * batch_size
     verbose: bool = True
-    gpu_ids: tuple = (0,1,2,3)     # GPU ids for training
-    
-    
+    gpu_ids: tuple = (0,1)     # GPU ids for training
+
     # Similarity Sampling
     custom_sampling: bool = True   # use custom sampling instead of random
     gps_sample: bool = True        # use gps sampling
@@ -68,9 +73,10 @@ class Configuration:
     data_folder = "./data/CVACT"     
     
     # Augment Images
-    prob_rotate: float = 0.75          # rotates the sat image and ground images simultaneously
+    # prob_rotate: float = 0.75          # rotates the sat image and ground images simultaneously
+    prob_rotate: float = 0          # rotates the sat image and ground images simultaneously
     prob_flip: float = 0.5             # flipping the sat image and ground images simultaneously
-    
+
     # Savepath for model checkpoints
     model_path: str = "./cvact"
     
@@ -81,8 +87,9 @@ class Configuration:
     checkpoint_start = None
   
     # set num_workers to 0 if on Windows
-    num_workers: int = 0 if os.name == 'nt' else 4 
-    
+    # num_workers: int = 0 if os.name == 'nt' else 8
+    num_workers: int = 0
+
     # train on GPU if available
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu' 
     
@@ -117,52 +124,83 @@ if __name__ == '__main__':
                  cudnn_benchmark=config.cudnn_benchmark,
                  cudnn_deterministic=config.cudnn_deterministic)
 
+    # -----------------------------------------------------------------------------#
+    # Loss                                                                        #
+    # -----------------------------------------------------------------------------#
+
+    infoNCE = InfoNCE(loss_function=torch.nn.CrossEntropyLoss(label_smoothing=config.label_smoothing), device=config.device)
+
     #-----------------------------------------------------------------------------#
     # Model                                                                       #
     #-----------------------------------------------------------------------------#
         
-    print("\nModel: {}".format(config.model))
 
+    #define Perspective Trnasform networks
+    opt = Namespace(results_dir='./CVACT_results', name='', seed=10, gpu_ids=config.gpu_ids, isTrain=True, resume=True, start_epoch=0,
+              data_root='./data/CVACT/ANU_data_small/', data_list='./data/CVACT/ACT_data.mat', polar=True,
+              save_step=10, rgan_checkpoint=None, n_epochs=200, batch_size=config.batch_size, lr_g=0.0001, lr_d=0.0001, lr_r=0.0001,
+              weight_decay=0.0, b1=0.5, b2=0.999, lambda_gp=10, lambda_l1=100, lambda_ret1=1000, lambda_sm=10,
+              hard_topk_ratio=1.0, hard_decay1_topk_ratio=0.1, hard_decay2_topk_ratio=0.05, hard_decay3_topk_ratio=0.01,
+              n_critic=1, input_c=3, segout_c=3, realout_c=3, n_layers=3, feature_c=64, g_model='unet-skip',
+              d_model='basic', r_model='SAFA', condition=1, is_Train=True, gan_loss='vanilla', device=config.device)
 
-    model = TimmModel(config.model,
-                          pretrained=True,
-                          img_size=config.img_size)
-                          
-    data_config = model.get_config()
-    print(data_config)
-    mean = data_config["mean"]
-    std = data_config["std"]
-    img_size = config.img_size
-    
-    image_size_sat = (img_size, img_size)
-    
-    new_width = config.img_size * 2    
-    new_hight = round((224 / 1232) * new_width)
-    img_size_ground = (new_hight, new_width)
-    
-    # Activate gradient checkpointing
-    if config.grad_checkpointing:
-        model.set_grad_checkpointing(True)
-     
-    # Load pretrained Checkpoint    
-    if config.checkpoint_start is not None:  
-        print("Start from:", config.checkpoint_start)
-        model_state_dict = torch.load(config.checkpoint_start)  
-        model.load_state_dict(model_state_dict, strict=False)     
+    generator = define_G(netG=opt.g_model, gpu_ids=config.gpu_ids)
+    print('Init {} as generator model'.format(opt.g_model))
 
-    # Data parallel
-    print("GPUs available:", torch.cuda.device_count())  
-    if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
-        model = torch.nn.DataParallel(model, device_ids=config.gpu_ids)
-            
-    # Model to device   
-    model = model.to(config.device)
+    discriminator = define_D(input_c=opt.input_c, output_c=opt.realout_c, ndf=opt.feature_c, netD=opt.d_model,
+                             condition=opt.condition, n_layers_D=opt.n_layers, gpu_ids=config.gpu_ids)
+    print('Init {} as discriminator model'.format(opt.d_model))
 
-    print("\nImage Size Sat:", image_size_sat)
-    print("Image Size Ground:", img_size_ground)
-    print("Mean: {}".format(mean))
-    print("Std:  {}\n".format(std)) 
+    retrieval = define_R(ret_method=opt.r_model, polar=opt.polar, gpu_ids=config.gpu_ids)
+    print('Init {} as retrieval model'.format(opt.r_model))
+    model = rgan_wrapper_cvact.RGANWrapper(opt, sys.stdout.file, generator, discriminator, retrieval, infoNCE)
 
+    image_size_sat = (112, 616) if opt.polar else (256, 256)
+    img_size_ground = (112, 616)
+
+    # print("\nModel: {}".format(config.model))
+    # model = TimmModel(config.model,
+    #                       pretrained=True,
+    #                       img_size=config.img_size)
+    #
+    # data_config = model.get_config()
+    # print(data_config)
+    # mean = data_config["mean"]
+    # std = data_config["std"]
+    # img_size = config.img_size
+    #
+    # image_size_sat = (img_size, img_size)
+    #
+    # new_width = config.img_size * 2
+    # new_hight = round((224 / 1232) * new_width)
+    # img_size_ground = (new_hight, new_width)
+    #
+    # # Activate gradient checkpointing
+    # if config.grad_checkpointing:
+    #     model.set_grad_checkpointing(True)
+    #
+    # # Load pretrained Checkpoint
+    # if config.checkpoint_start is not None:
+    #     print("Start from:", config.checkpoint_start)
+    #     model_state_dict = torch.load(config.checkpoint_start)
+    #     model.load_state_dict(model_state_dict, strict=False)
+    #
+    # # Data parallel
+    # print("GPUs available:", torch.cuda.device_count())
+    # if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
+    #     model = torch.nn.DataParallel(model, device_ids=config.gpu_ids)
+    #
+    # # Model to device
+    # model = model.to(config.device)
+    #
+    # print("\nImage Size Sat:", image_size_sat)
+    # print("Image Size Ground:", img_size_ground)
+    # print("Mean: {}".format(mean))
+    # print("Std:  {}\n".format(std))
+    #
+    # # original size
+    # # Image Size Sat: (384, 384)
+    # # Image Size Ground: (140, 768)
 
     #-----------------------------------------------------------------------------#
     # DataLoader                                                                  #
@@ -171,8 +209,8 @@ if __name__ == '__main__':
     # Transforms
     sat_transforms_train, ground_transforms_train = get_transforms_train(image_size_sat,
                                                                    img_size_ground,
-                                                                   mean=mean,
-                                                                   std=std,
+                                                                   # mean=mean,
+                                                                   # std=std,
                                                                    )
                                                                    
                                                                    
@@ -196,8 +234,8 @@ if __name__ == '__main__':
     # Eval
     sat_transforms_val, ground_transforms_val = get_transforms_val(image_size_sat,
                                                                img_size_ground,
-                                                               mean=mean,
-                                                               std=std,
+                                                               # mean=mean,
+                                                               # std=std,
                                                                )
 
 
@@ -277,17 +315,7 @@ if __name__ == '__main__':
 
 
         print("\nReference Images Train:", len(reference_dataset_train))
-        print("Query Images Train:", len(query_dataset_train))        
-
-    
-    #-----------------------------------------------------------------------------#
-    # Loss                                                                        #
-    #-----------------------------------------------------------------------------#
-
-    loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
-    loss_function = InfoNCE(loss_function=loss_fn,
-                            device=config.device,
-                            )
+        print("Query Images Train:", len(query_dataset_train))
 
     if config.mixed_precision:
         scaler = GradScaler(init_scale=2.**10)
@@ -391,12 +419,11 @@ if __name__ == '__main__':
     for epoch in range(1, config.epochs+1):
         
         print("\n{}[Epoch: {}]{}".format(30*"-", epoch, 30*"-"))
-        
 
         train_loss = train(config,
                            model,
                            dataloader=train_dataloader,
-                           loss_function=loss_function,
+                           loss_function=infoNCE,
                            optimizer=optimizer,
                            scheduler=scheduler,
                            scaler=scaler)
@@ -431,10 +458,10 @@ if __name__ == '__main__':
 
                 best_score = r1_test
 
-                if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
-                    torch.save(model.module.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
-                else:
-                    torch.save(model.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
+                # if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
+                #     torch.save(model.module.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
+                # else:
+                torch.save(model.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
                 
 
         if config.custom_sampling:

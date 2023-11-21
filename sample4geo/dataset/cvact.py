@@ -49,8 +49,10 @@ class CVACTDatasetTrain(Dataset):
             idx = str(idx)
             
             grd_path = f'ANU_data_small/streetview/{idx}_grdView.jpg'
-            sat_path = f'ANU_data_small/satview_polish/{idx}_satView_polish.jpg'
-            
+            # TODO: add flag to switch between polar and satview_polish
+            # sat_path = f'ANU_data_small/satview_polish/{idx}_satView_polish.jpg'
+            sat_path = f'ANU_data_small/polarmap/{idx}_satView_polish.jpg'
+
             if not os.path.exists(f'{self.data_folder}/{grd_path}') or not os.path.exists(f'{self.data_folder}/{sat_path}'):
                 self.idx_ignor.add(idx)
             else:
@@ -78,10 +80,11 @@ class CVACTDatasetTrain(Dataset):
         query_img = cv2.cvtColor(query_img, cv2.COLOR_BGR2RGB)
         
         # load reference -> satellite image
-        reference_img = cv2.imread(f'{self.data_folder}/ANU_data_small/satview_polish/{idx}_satView_polish.jpg')
+        # reference_img = cv2.imread(f'{self.data_folder}/ANU_data_small/satview_polish/{idx}_satView_polish.jpg')
+        reference_img = cv2.imread(f'{self.data_folder}/ANU_data_small/polarmap/{idx}_satView_polish.jpg')
+
         reference_img = cv2.cvtColor(reference_img, cv2.COLOR_BGR2RGB)
 
-            
         # Flip simultaneously query and reference
         if np.random.random() < self.prob_flip:
             query_img = cv2.flip(query_img, 1)
@@ -108,7 +111,7 @@ class CVACTDatasetTrain(Dataset):
             query_img = torch.roll(query_img, shifts=shifts, dims=2)  
                    
             
-        label = torch.tensor(idnum, dtype=torch.long)  
+        label = torch.tensor(idnum, dtype=torch.long)
         
         return query_img, reference_img, label
     
@@ -268,7 +271,8 @@ class CVACTDatasetEval(Dataset):
             idx = str(idx)
             
             grd_path = f'{self.data_folder}/ANU_data_small/streetview/{idx}_grdView.jpg'
-            sat_path = f'{self.data_folder}/ANU_data_small/satview_polish/{idx}_satView_polish.jpg'
+            # sat_path = f'{self.data_folder}/ANU_data_small/satview_polish/{idx}_satView_polish.jpg'
+            sat_path = f'{self.data_folder}/ANU_data_small/polarmap/{idx}_satView_polish.jpg'
    
             if not os.path.exists(grd_path) or not os.path.exists(sat_path):
                 self.idx_ignor.add(idx)
@@ -287,7 +291,8 @@ class CVACTDatasetEval(Dataset):
         idx = self.samples[index]
         
         if self.img_type == "reference":
-            path = f'{self.data_folder}/ANU_data_small/satview_polish/{idx}_satView_polish.jpg'
+            # path = f'{self.data_folder}/ANU_data_small/satview_polish/{idx}_satView_polish.jpg'
+            path = f'{self.data_folder}/ANU_data_small/polarmap/{idx}_satView_polish.jpg'
         elif self.img_type == "query":
             path = f'{self.data_folder}/ANU_data_small/streetview/{idx}_grdView.jpg'
 
@@ -320,7 +325,8 @@ class CVACTDatasetTest(Dataset):
         self.img_type = img_type
         self.transforms = transforms
         
-        files_sat = glob(f'{self.data_folder}/ANU_data_test/satview_polish/*_satView_polish.jpg')
+        # files_sat = glob(f'{self.data_folder}/ANU_data_test/satview_polish/*_satView_polish.jpg')
+        files_sat = glob(f'{self.data_folder}/ANU_data_test/polarmap/*_satView_polish.jpg')
         files_ground = glob(f'{self.data_folder}/ANU_data_test/streetview/*_grdView.jpg')
         
         sat_ids = []
@@ -351,7 +357,8 @@ class CVACTDatasetTest(Dataset):
         idx = self.test_ids[index]
         
         if self.img_type == "reference":
-            path = f'{self.data_folder}/ANU_data_test/satview_polish/{idx}_satView_polish.jpg'
+            # path = f'{self.data_folder}/ANU_data_test/satview_polish/{idx}_satView_polish.jpg'
+            path = f'{self.data_folder}/ANU_data_test/polarmap/{idx}_satView_polish.jpg'
         else:
             path = f'{self.data_folder}/ANU_data_test/streetview/{idx}_grdView.jpg'
 

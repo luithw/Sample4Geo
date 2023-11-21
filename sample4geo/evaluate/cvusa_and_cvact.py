@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 import gc
 import copy
-from ..trainer import predict
+from ..trainer import predict, predict_duo
 
 
 def evaluate(config,
@@ -17,11 +17,13 @@ def evaluate(config,
     
     
     print("\nExtract Features:")
-    reference_features, reference_labels = predict(config, model, reference_dataloader) 
-    query_features, query_labels = predict(config, model, query_dataloader)
-    
+    # reference_features, reference_labels = predict(config, model, reference_dataloader)
+    # query_features, query_labels = predict(config, model, query_dataloader)
+
+    query_features, query_labels, reference_features, reference_labels = predict_duo(config, model, query_dataloader, reference_dataloader)
+
     print("Compute Scores:")
-    r1 =  calculate_scores(query_features, reference_features, query_labels, reference_labels, step_size=step_size, ranks=ranks) 
+    r1 = calculate_scores(query_features, reference_features, query_labels, reference_labels, step_size=step_size, ranks=ranks)
         
     # cleanup and free memory on GPU
     if cleanup:
@@ -41,8 +43,9 @@ def calc_sim(config,
     
     
     print("\nExtract Features:")
-    reference_features, reference_labels = predict(config, model, reference_dataloader) 
-    query_features, query_labels = predict(config, model, query_dataloader)
+    # reference_features, reference_labels = predict(config, model, reference_dataloader)
+    # query_features, query_labels = predict(config, model, query_dataloader)
+    query_features, query_labels, reference_features, reference_labels = predict_duo(config, model, query_dataloader, reference_dataloader)
     
     print("Compute Scores Train:")
     r1 =  calculate_scores(query_features, reference_features, query_labels, reference_labels, step_size=step_size, ranks=ranks) 
@@ -140,7 +143,6 @@ def calculate_scores(query_features, reference_features, query_labels, reference
     
 
 def calculate_nearest(query_features, reference_features, query_labels, reference_labels, neighbour_range=64, step_size=1000):
-
 
     Q = len(query_features)
     

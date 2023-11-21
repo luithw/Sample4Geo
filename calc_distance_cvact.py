@@ -61,7 +61,6 @@ ids_near_numpy = ids.numpy()
 near_neighbors = dict()
 
 for i, idnum in enumerate(train_idsnum_list):
-    
     near_neighbors[idnum] = train_idsnum_lookup[ids_near_numpy[i]].tolist()
 
 print("Saving...") 
