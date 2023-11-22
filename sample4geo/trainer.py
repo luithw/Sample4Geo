@@ -29,17 +29,16 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
     for query, reference, ids in bar:
         
         if scaler:
-            with autocast():
-                # data (batches) to device   
-                query = query.to(train_config.device)
-                reference = reference.to(train_config.device)
-                # Forward pass
-                features1, features2 = model(query, reference)
-                # if torch.cuda.device_count() > 1 and len(train_config.gpu_ids) > 1:
-                #     loss = loss_function(features1, features2, model.module.logit_scale.exp())
-                # else:
-                loss = loss_function(features1, features2, model.logit_scale.exp())
-                losses.update(loss.item())
+            # data (batches) to device
+            query = query.to(train_config.device)
+            reference = reference.to(train_config.device)
+            # Forward pass
+            features1, features2 = model(query, reference)
+            # if torch.cuda.device_count() > 1 and len(train_config.gpu_ids) > 1:
+            #     loss = loss_function(features1, features2, model.module.logit_scale.exp())
+            # else:
+            loss = loss_function(features1, features2, model.logit_scale.exp())
+            losses.update(loss.item())
                 
                   
             # scaler.scale(loss).backward()
@@ -57,8 +56,8 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
             # optimizer.zero_grad()
 
             # Scheduler
-            if train_config.scheduler == "polynomial" or train_config.scheduler == "cosine" or train_config.scheduler ==  "constant":
-                scheduler.step()
+            # if train_config.scheduler == "polynomial" or train_config.scheduler == "cosine" or train_config.scheduler ==  "constant":
+            #     scheduler.step()
    
         else:
         

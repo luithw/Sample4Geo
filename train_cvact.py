@@ -87,8 +87,7 @@ class Configuration:
     checkpoint_start = None
   
     # set num_workers to 0 if on Windows
-    # num_workers: int = 0 if os.name == 'nt' else 8
-    num_workers: int = 0
+    num_workers: int = 0 if os.name == 'nt' else 10
 
     # train on GPU if available
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu' 
@@ -350,31 +349,37 @@ if __name__ == '__main__':
 
     train_steps = len(train_dataloader) * config.epochs
     warmup_steps = len(train_dataloader) * config.warmup_epochs
-       
-    if config.scheduler == "polynomial":
-        print("\nScheduler: polynomial - max LR: {} - end LR: {}".format(config.lr, config.lr_end))  
-        scheduler = get_polynomial_decay_schedule_with_warmup(optimizer,
-                                                              num_training_steps=train_steps,
-                                                              lr_end = config.lr_end,
-                                                              power=1.5,
-                                                              num_warmup_steps=warmup_steps)
-        
-    elif config.scheduler == "cosine":
-        print("\nScheduler: cosine - max LR: {}".format(config.lr))   
-        scheduler = get_cosine_schedule_with_warmup(optimizer,
-                                                    num_training_steps=train_steps,
-                                                    num_warmup_steps=warmup_steps)
-        
-    elif config.scheduler == "constant":
-        print("\nScheduler: constant - max LR: {}".format(config.lr))   
-        scheduler =  get_constant_schedule_with_warmup(optimizer,
-                                                       num_warmup_steps=warmup_steps)
-           
-    else:
-        scheduler = None
-        
-    print("Warmup Epochs: {} - Warmup Steps: {}".format(str(config.warmup_epochs).ljust(2), warmup_steps))
-    print("Train Epochs:  {} - Train Steps:  {}".format(config.epochs, train_steps))
+
+    def create_scheduler(optimizer):
+        if config.scheduler == "polynomial":
+            print("\nScheduler: polynomial - max LR: {} - end LR: {}".format(config.lr, config.lr_end))
+            scheduler = get_polynomial_decay_schedule_with_warmup(optimizer,
+                                                                  num_training_steps=train_steps,
+                                                                  lr_end = config.lr_end,
+                                                                  power=1.5,
+                                                                  num_warmup_steps=warmup_steps)
+
+        elif config.scheduler == "cosine":
+            print("\nScheduler: cosine - max LR: {}".format(config.lr))
+            scheduler = get_cosine_schedule_with_warmup(optimizer,
+                                                        num_training_steps=train_steps,
+                                                        num_warmup_steps=warmup_steps)
+
+        elif config.scheduler == "constant":
+            print("\nScheduler: constant - max LR: {}".format(config.lr))
+            scheduler =  get_constant_schedule_with_warmup(optimizer,
+                                                           num_warmup_steps=warmup_steps)
+
+        else:
+            scheduler = None
+
+        print("Warmup Epochs: {} - Warmup Steps: {}".format(str(config.warmup_epochs).ljust(2), warmup_steps))
+        print("Train Epochs:  {} - Train Steps:  {}".format(config.epochs, train_steps))
+        return scheduler
+    scheduler = create_scheduler(optimizer)
+    model.scheduler_G = create_scheduler(model.optimizer_G)
+    model.scheduler_R = create_scheduler(model.optimizer_R)
+    model.scheduler_D = create_scheduler(model.optimizer_D)
         
         
     #-----------------------------------------------------------------------------#
@@ -461,19 +466,21 @@ if __name__ == '__main__':
                 # if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
                 #     torch.save(model.module.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
                 # else:
-                torch.save(model.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
-                
+                # torch.save(model.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
+                model.save_networks(epoch, model_path, best_acc=r1_test, is_best=True)
+
 
         if config.custom_sampling:
             train_dataloader.dataset.shuffle(sim_dict,
                                              neighbour_select=config.neighbour_select,
                                              neighbour_range=config.neighbour_range)
                 
-    if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
-        torch.save(model.module.state_dict(), '{}/weights_end.pth'.format(model_path))
-    else:
-        torch.save(model.state_dict(), '{}/weights_end.pth'.format(model_path))  
+    # if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
+    #     torch.save(model.module.state_dict(), '{}/weights_end.pth'.format(model_path))
+    # else:
+    #     torch.save(model.state_dict(), '{}/weights_end.pth'.format(model_path))
 
+    model.save_networks(epoch, model_path, last_ckpt=True)
 
     #-----------------------------------------------------------------------------#
     # Test                                                                        #

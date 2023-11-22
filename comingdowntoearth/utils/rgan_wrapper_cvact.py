@@ -3,7 +3,7 @@ import os
 from itertools import chain
 
 import numpy as np
-from torch.cuda.amp import GradScaler
+from torch.cuda.amp import GradScaler, autocast
 from torch.nn import Parameter
 
 from .base_wrapper import BaseModel
@@ -57,33 +57,12 @@ class RGANWrapper(BaseModel):
 
         self.d_loss = (self.d_loss_real + self.d_loss_fake) * 0.5
 
-        self.scaler_D.scale(self.d_loss).backward()
-
-        # Gradient clipping
-        self.scaler_D.unscale_(self.optimizer_D)
-        torch.nn.utils.clip_grad_value_(self.discriminator.parameters(), self.clip_grad)
-
-        # Update model parameters (weights)
-        self.scaler_D.step(self.optimizer_D)
-        self.scaler_D.update()
-
 
     def backward_R(self):
         self.optimizer_R.zero_grad()
 
         self.fake_street_out, self.street_out = self.retrieval(self.street, self.residual.detach())
         self.r_loss = self.infoNCE(self.fake_street_out, self.street_out, self.logit_scale)
-
-        self.scaler_R.scale(self.r_loss).backward()
-
-        # Gradient clipping
-        self.scaler_R.unscale_(self.optimizer_R)
-        torch.nn.utils.clip_grad_value_(self.retrieval.parameters(), self.clip_grad)
-
-        # Update model parameters (weights)
-        self.scaler_R.step(self.optimizer_R)
-        self.scaler_R.update()
-
 
     def backward_G(self):
         self.optimizer_G.zero_grad()
@@ -98,34 +77,44 @@ class RGANWrapper(BaseModel):
         self.g_l1 = self.criterion_l1(self.fake_street, self.street) * self.opt.lambda_l1
         self.g_loss = self.gan_loss + self.ret_loss + self.g_l1
 
-        self.scaler_G.scale(self.g_loss).backward()
+    def optimize_parameters(self):
+        with autocast():
+            self.forward()
+            # update D
+            self.set_requires_grad(self.discriminator, True)
+            self.backward_D()
+        self.scaler_D.scale(self.d_loss).backward()
+        self.scaler_D.unscale_(self.optimizer_D)
+        torch.nn.utils.clip_grad_value_(self.discriminator.parameters(), self.clip_grad)
+        self.scaler_D.step(self.optimizer_D)
+        self.scaler_D.update()
+        if self.scheduler_D is not None:
+            self.scheduler_D.step()
 
-        # Gradient clipping
+        with autocast():
+            # update R
+            self.set_requires_grad(self.discriminator, False)
+            self.set_requires_grad(self.retrieval, True)
+            self.backward_R()
+        self.scaler_R.scale(self.r_loss).backward()
+        self.scaler_R.unscale_(self.optimizer_R)
+        torch.nn.utils.clip_grad_value_(self.retrieval.parameters(), self.clip_grad)
+        self.scaler_R.step(self.optimizer_R)
+        self.scaler_R.update()
+        if self.scheduler_R is not None:
+            self.scheduler_R.step()
+
+        with autocast():
+            # update G
+            self.set_requires_grad(self.retrieval, False)
+            self.backward_G()
+        self.scaler_G.scale(self.g_loss).backward()
         self.scaler_G.unscale_(self.optimizer_G)
         torch.nn.utils.clip_grad_value_(self.generator.parameters(), self.clip_grad)
-
-        # Update model parameters (weights)
         self.scaler_G.step(self.optimizer_G)
         self.scaler_G.update()
-
-
-    def optimize_parameters(self):
-        # TODO: add scalar and scheduler
-
-        self.forward()
-
-        # update D
-        self.set_requires_grad(self.discriminator, True)
-        self.backward_D()
-
-        # update R
-        self.set_requires_grad(self.discriminator, False)
-        self.set_requires_grad(self.retrieval, True)
-        self.backward_R()
-
-        # update G
-        self.set_requires_grad(self.retrieval, False)
-        self.backward_G()
+        if self.scheduler_G is not None:
+            self.scheduler_G.step()
 
     def predict(self, street, satellite):
         self.street = street
