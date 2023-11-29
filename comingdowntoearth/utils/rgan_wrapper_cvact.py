@@ -78,6 +78,8 @@ class RGANWrapper(BaseModel):
         self.g_loss = self.gan_loss + self.ret_loss + self.g_l1
 
     def optimize_parameters(self):
+        # TODO: use the original model in this wrapper on its own and see if I can get the same accuracy
+        # TODO: Try the original image size and see if I can get the same accuracy
         with autocast():
             self.forward()
             # update D
