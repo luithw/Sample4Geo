@@ -24,40 +24,48 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
         bar = tqdm(dataloader, total=len(dataloader))
     else:
         bar = dataloader
-    
+
     # for loop over one epoch
     for query, reference, ids in bar:
-        
+        breakpoint()
+
         if scaler:
             # data (batches) to device
             query = query.to(train_config.device)
             reference = reference.to(train_config.device)
             # Forward pass
+            breakpoint()
             features1, features2 = model(query, reference)
-            # if torch.cuda.device_count() > 1 and len(train_config.gpu_ids) > 1:
-            #     loss = loss_function(features1, features2, model.module.logit_scale.exp())
-            # else:
+
+            # coming2earth model
             loss = loss_function(features1, features2, model.logit_scale.exp())
             losses.update(loss.item())
+
+
+            if torch.cuda.device_count() > 1 and len(train_config.gpu_ids) > 1:
+                loss = loss_function(features1, features2, model.module.logit_scale.exp())
+            else:
+                loss = loss_function(features1, features2, model.logit_scale.exp())
+                losses.update(loss.item())
                 
                   
-            # scaler.scale(loss).backward()
-            #
-            # # Gradient clipping
-            # if train_config.clip_grad:
-            #     scaler.unscale_(optimizer)
-            #     torch.nn.utils.clip_grad_value_(model.parameters(), train_config.clip_grad)
-            #
-            # # Update model parameters (weights)
-            # scaler.step(optimizer)
-            # scaler.update()
-            #
-            # # Zero gradients for next step
-            # optimizer.zero_grad()
+            scaler.scale(loss).backward()
 
-            # Scheduler
-            # if train_config.scheduler == "polynomial" or train_config.scheduler == "cosine" or train_config.scheduler ==  "constant":
-            #     scheduler.step()
+            # Gradient clipping
+            if train_config.clip_grad:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_value_(model.parameters(), train_config.clip_grad)
+
+            # Update model parameters (weights)
+            scaler.step(optimizer)
+            scaler.update()
+
+            # Zero gradients for next step
+            optimizer.zero_grad()
+
+            Scheduler
+            if train_config.scheduler == "polynomial" or train_config.scheduler == "cosine" or train_config.scheduler ==  "constant":
+                scheduler.step()
    
         else:
         

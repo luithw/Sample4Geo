@@ -143,63 +143,63 @@ if __name__ == '__main__':
               n_critic=1, input_c=3, segout_c=3, realout_c=3, n_layers=3, feature_c=64, g_model='unet-skip',
               d_model='basic', r_model='SAFA', condition=1, is_Train=True, gan_loss='vanilla', device=config.device)
 
-    generator = define_G(netG=opt.g_model, gpu_ids=config.gpu_ids)
-    print('Init {} as generator model'.format(opt.g_model))
-
-    discriminator = define_D(input_c=opt.input_c, output_c=opt.realout_c, ndf=opt.feature_c, netD=opt.d_model,
-                             condition=opt.condition, n_layers_D=opt.n_layers, gpu_ids=config.gpu_ids)
-    print('Init {} as discriminator model'.format(opt.d_model))
-
-    retrieval = define_R(ret_method=opt.r_model, polar=opt.polar, gpu_ids=config.gpu_ids)
-    print('Init {} as retrieval model'.format(opt.r_model))
-    model = rgan_wrapper_cvact.RGANWrapper(opt, sys.stdout.file, generator, discriminator, retrieval, infoNCE)
+    # generator = define_G(netG=opt.g_model, gpu_ids=config.gpu_ids)
+    # print('Init {} as generator model'.format(opt.g_model))
+    #
+    # discriminator = define_D(input_c=opt.input_c, output_c=opt.realout_c, ndf=opt.feature_c, netD=opt.d_model,
+    #                          condition=opt.condition, n_layers_D=opt.n_layers, gpu_ids=config.gpu_ids)
+    # print('Init {} as discriminator model'.format(opt.d_model))
+    #
+    # retrieval = define_R(ret_method=opt.r_model, polar=opt.polar, gpu_ids=config.gpu_ids)
+    # print('Init {} as retrieval model'.format(opt.r_model))
+    # model = rgan_wrapper_cvact.RGANWrapper(opt, sys.stdout.file, generator, discriminator, retrieval, infoNCE)
 
     image_size_sat = (112, 616) if opt.polar else (256, 256)
     img_size_ground = (112, 616)
 
-    # print("\nModel: {}".format(config.model))
-    # model = TimmModel(config.model,
-    #                       pretrained=True,
-    #                       img_size=config.img_size)
-    #
-    # data_config = model.get_config()
-    # print(data_config)
-    # mean = data_config["mean"]
-    # std = data_config["std"]
-    # img_size = config.img_size
-    #
-    # image_size_sat = (img_size, img_size)
-    #
-    # new_width = config.img_size * 2
-    # new_hight = round((224 / 1232) * new_width)
-    # img_size_ground = (new_hight, new_width)
-    #
-    # # Activate gradient checkpointing
-    # if config.grad_checkpointing:
-    #     model.set_grad_checkpointing(True)
-    #
-    # # Load pretrained Checkpoint
-    # if config.checkpoint_start is not None:
-    #     print("Start from:", config.checkpoint_start)
-    #     model_state_dict = torch.load(config.checkpoint_start)
-    #     model.load_state_dict(model_state_dict, strict=False)
-    #
-    # # Data parallel
-    # print("GPUs available:", torch.cuda.device_count())
-    # if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
-    #     model = torch.nn.DataParallel(model, device_ids=config.gpu_ids)
-    #
-    # # Model to device
-    # model = model.to(config.device)
-    #
-    # print("\nImage Size Sat:", image_size_sat)
-    # print("Image Size Ground:", img_size_ground)
-    # print("Mean: {}".format(mean))
-    # print("Std:  {}\n".format(std))
-    #
-    # # original size
-    # # Image Size Sat: (384, 384)
-    # # Image Size Ground: (140, 768)
+    # original size
+    # Image Size Sat: (384, 384)
+    # Image Size Ground: (140, 768)
+
+    print("\nModel: {}".format(config.model))
+    model = TimmModel(config.model,
+                          pretrained=True,
+                          img_size=config.img_size)
+
+    data_config = model.get_config()
+    print(data_config)
+    mean = data_config["mean"]
+    std = data_config["std"]
+    img_size = config.img_size
+
+    image_size_sat = (img_size, img_size)
+
+    new_width = config.img_size * 2
+    new_hight = round((224 / 1232) * new_width)
+    img_size_ground = (new_hight, new_width)
+
+    # Activate gradient checkpointing
+    if config.grad_checkpointing:
+        model.set_grad_checkpointing(True)
+
+    # Load pretrained Checkpoint
+    if config.checkpoint_start is not None:
+        print("Start from:", config.checkpoint_start)
+        model_state_dict = torch.load(config.checkpoint_start)
+        model.load_state_dict(model_state_dict, strict=False)
+
+    # Data parallel
+    print("GPUs available:", torch.cuda.device_count())
+    if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
+        model = torch.nn.DataParallel(model, device_ids=config.gpu_ids)
+
+    # Model to device
+    model = model.to(config.device)
+
+    print("\nImage Size Sat:", image_size_sat)
+    print("Image Size Ground:", img_size_ground)
+    print("Mean: {}".format(mean))
+    print("Std:  {}\n".format(std))
 
     #-----------------------------------------------------------------------------#
     # DataLoader                                                                  #
@@ -283,7 +283,6 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------#
     # Sim Sample                                                                  #
     #-----------------------------------------------------------------------------#
-    
     if config.sim_sample:
     
         # Query Ground Images Train for simsampling
@@ -377,9 +376,10 @@ if __name__ == '__main__':
         print("Train Epochs:  {} - Train Steps:  {}".format(config.epochs, train_steps))
         return scheduler
     scheduler = create_scheduler(optimizer)
-    model.scheduler_G = create_scheduler(model.optimizer_G)
-    model.scheduler_R = create_scheduler(model.optimizer_R)
-    model.scheduler_D = create_scheduler(model.optimizer_D)
+
+    # model.scheduler_G = create_scheduler(model.optimizer_G)
+    # model.scheduler_R = create_scheduler(model.optimizer_R)
+    # model.scheduler_D = create_scheduler(model.optimizer_D)
         
         
     #-----------------------------------------------------------------------------#
