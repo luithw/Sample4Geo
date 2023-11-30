@@ -98,6 +98,8 @@ class Configuration:
     # make cudnn deterministic
     cudnn_deterministic: bool = False
 
+    coming2earth: bool = True
+
 #-----------------------------------------------------------------------------#
 # Train Config                                                                #
 #-----------------------------------------------------------------------------#
@@ -143,40 +145,43 @@ if __name__ == '__main__':
               n_critic=1, input_c=3, segout_c=3, realout_c=3, n_layers=3, feature_c=64, g_model='unet-skip',
               d_model='basic', r_model='SAFA', condition=1, is_Train=True, gan_loss='vanilla', device=config.device)
 
-    # generator = define_G(netG=opt.g_model, gpu_ids=config.gpu_ids)
-    # print('Init {} as generator model'.format(opt.g_model))
-    #
-    # discriminator = define_D(input_c=opt.input_c, output_c=opt.realout_c, ndf=opt.feature_c, netD=opt.d_model,
-    #                          condition=opt.condition, n_layers_D=opt.n_layers, gpu_ids=config.gpu_ids)
-    # print('Init {} as discriminator model'.format(opt.d_model))
-    #
-    # retrieval = define_R(ret_method=opt.r_model, polar=opt.polar, gpu_ids=config.gpu_ids)
-    # print('Init {} as retrieval model'.format(opt.r_model))
-    # model = rgan_wrapper_cvact.RGANWrapper(opt, sys.stdout.file, generator, discriminator, retrieval, infoNCE)
+    if config.coming2earth:
+        generator = define_G(netG=opt.g_model, gpu_ids=config.gpu_ids)
+        print('Init {} as generator model'.format(opt.g_model))
+
+        discriminator = define_D(input_c=opt.input_c, output_c=opt.realout_c, ndf=opt.feature_c, netD=opt.d_model,
+                                 condition=opt.condition, n_layers_D=opt.n_layers, gpu_ids=config.gpu_ids)
+        print('Init {} as discriminator model'.format(opt.d_model))
+
+        retrieval = define_R(ret_method=opt.r_model, polar=opt.polar, gpu_ids=config.gpu_ids)
+        print('Init {} as retrieval model'.format(opt.r_model))
+        model = rgan_wrapper_cvact.RGANWrapper(opt, sys.stdout.file, generator, discriminator, retrieval, infoNCE)
+    else:
+        print("\nModel: {}".format(config.model))
+        model = TimmModel(config.model,
+                              pretrained=True,
+                              img_size=config.img_size)
+
+        data_config = model.get_config()
+        print(data_config)
+        # mean = data_config["mean"]
+        # std = data_config["std"]
+        # image_size_sat = (img_size, img_size)
+        #
+        # new_width = config.img_size * 2
+        # new_hight = round((224 / 1232) * new_width)
+        # img_size_ground = (new_hight, new_width)
+        #
+        # original size
+        # Image Size Sat: (384, 384)
+        # Image Size Ground: (140, 768)
+
+    mean = (0.485, 0.456, 0.406)
+    std = (0.229, 0.224, 0.225)
+    img_size = config.img_size
 
     image_size_sat = (112, 616) if opt.polar else (256, 256)
     img_size_ground = (112, 616)
-
-    # original size
-    # Image Size Sat: (384, 384)
-    # Image Size Ground: (140, 768)
-
-    print("\nModel: {}".format(config.model))
-    model = TimmModel(config.model,
-                          pretrained=True,
-                          img_size=config.img_size)
-
-    data_config = model.get_config()
-    print(data_config)
-    mean = data_config["mean"]
-    std = data_config["std"]
-    img_size = config.img_size
-
-    image_size_sat = (img_size, img_size)
-
-    new_width = config.img_size * 2
-    new_hight = round((224 / 1232) * new_width)
-    img_size_ground = (new_hight, new_width)
 
     # Activate gradient checkpointing
     if config.grad_checkpointing:
@@ -189,12 +194,12 @@ if __name__ == '__main__':
         model.load_state_dict(model_state_dict, strict=False)
 
     # Data parallel
-    print("GPUs available:", torch.cuda.device_count())
-    if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
-        model = torch.nn.DataParallel(model, device_ids=config.gpu_ids)
-
-    # Model to device
-    model = model.to(config.device)
+    if not config.coming2earth:
+        print("GPUs available:", torch.cuda.device_count())
+        if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
+            model = torch.nn.DataParallel(model, device_ids=config.gpu_ids)
+        # Model to device
+        model = model.to(config.device)
 
     print("\nImage Size Sat:", image_size_sat)
     print("Image Size Ground:", img_size_ground)
@@ -208,8 +213,8 @@ if __name__ == '__main__':
     # Transforms
     sat_transforms_train, ground_transforms_train = get_transforms_train(image_size_sat,
                                                                    img_size_ground,
-                                                                   # mean=mean,
-                                                                   # std=std,
+                                                                   mean=mean,
+                                                                   std=std,
                                                                    )
                                                                    
                                                                    
@@ -319,6 +324,8 @@ if __name__ == '__main__':
         scaler = GradScaler(init_scale=2.**10)
     else:
         scaler = None
+
+    print("model:", model)
         
     #-----------------------------------------------------------------------------#
     # optimizer                                                                   #
@@ -375,13 +382,14 @@ if __name__ == '__main__':
         print("Warmup Epochs: {} - Warmup Steps: {}".format(str(config.warmup_epochs).ljust(2), warmup_steps))
         print("Train Epochs:  {} - Train Steps:  {}".format(config.epochs, train_steps))
         return scheduler
-    scheduler = create_scheduler(optimizer)
+    if config.coming2earth:
+        model.scheduler_G = create_scheduler(model.optimizer_G)
+        model.scheduler_R = create_scheduler(model.optimizer_R)
+        model.scheduler_D = create_scheduler(model.optimizer_D)
+        scheduler = None
+    else:
+        scheduler = create_scheduler(optimizer)
 
-    # model.scheduler_G = create_scheduler(model.optimizer_G)
-    # model.scheduler_R = create_scheduler(model.optimizer_R)
-    # model.scheduler_D = create_scheduler(model.optimizer_D)
-        
-        
     #-----------------------------------------------------------------------------#
     # Zero Shot                                                                   #
     #-----------------------------------------------------------------------------#
@@ -392,7 +400,7 @@ if __name__ == '__main__':
         r1_test = evaluate(config=config,
                            model=model,
                            reference_dataloader=reference_dataloader_val,
-                           query_dataloader=query_dataloader_val, 
+                           query_dataloader=query_dataloader_val,
                            ranks=[1, 5, 10],
                            step_size=1000,
                            cleanup=True)
@@ -419,7 +427,6 @@ if __name__ == '__main__':
     #-----------------------------------------------------------------------------#
     start_epoch = 0   
     best_score = 0
-    
 
     for epoch in range(1, config.epochs+1):
         
@@ -463,24 +470,27 @@ if __name__ == '__main__':
 
                 best_score = r1_test
 
-                # if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
-                #     torch.save(model.module.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
-                # else:
-                # torch.save(model.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
-                model.save_networks(epoch, model_path, best_acc=r1_test, is_best=True)
+                if config.coming2earth:
+                    model.save_networks(epoch, model_path, best_acc=r1_test, is_best=True)
+                else:
+                    if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
+                        torch.save(model.module.state_dict(),
+                                   '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
+                    else:
+                        torch.save(model.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
 
 
         if config.custom_sampling:
             train_dataloader.dataset.shuffle(sim_dict,
                                              neighbour_select=config.neighbour_select,
                                              neighbour_range=config.neighbour_range)
-                
-    # if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
-    #     torch.save(model.module.state_dict(), '{}/weights_end.pth'.format(model_path))
-    # else:
-    #     torch.save(model.state_dict(), '{}/weights_end.pth'.format(model_path))
-
-    model.save_networks(epoch, model_path, last_ckpt=True)
+    if config.coming2earth:
+        model.save_networks(epoch, model_path, last_ckpt=True)
+    else:
+        if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
+            torch.save(model.module.state_dict(), '{}/weights_end.pth'.format(model_path))
+        else:
+            torch.save(model.state_dict(), '{}/weights_end.pth'.format(model_path))
 
     #-----------------------------------------------------------------------------#
     # Test                                                                        #

@@ -17,11 +17,11 @@ def evaluate(config,
     
     
     print("\nExtract Features:")
-    # reference_features, reference_labels = predict(config, model, reference_dataloader)
-    # query_features, query_labels = predict(config, model, query_dataloader)
-
-    query_features, query_labels, reference_features, reference_labels = predict_duo(config, model, query_dataloader, reference_dataloader)
-
+    if config.coming2earth:
+        query_features, query_labels, reference_features, reference_labels = predict_duo(config, model, query_dataloader, reference_dataloader)
+    else:
+        reference_features, reference_labels = predict(config, model, reference_dataloader)
+        query_features, query_labels = predict(config, model, query_dataloader)
     print("Compute Scores:")
     r1 = calculate_scores(query_features, reference_features, query_labels, reference_labels, step_size=step_size, ranks=ranks)
         
@@ -40,12 +40,13 @@ def calc_sim(config,
              ranks=[1, 5, 10],
              step_size=1000,
              cleanup=True):
-    
-    
+
     print("\nExtract Features:")
-    # reference_features, reference_labels = predict(config, model, reference_dataloader)
-    # query_features, query_labels = predict(config, model, query_dataloader)
-    query_features, query_labels, reference_features, reference_labels = predict_duo(config, model, query_dataloader, reference_dataloader)
+    if config.coming2earth:
+        query_features, query_labels, reference_features, reference_labels = predict_duo(config, model, query_dataloader, reference_dataloader)
+    else:
+        reference_features, reference_labels = predict(config, model, reference_dataloader)
+        query_features, query_labels = predict(config, model, query_dataloader)
     
     print("Compute Scores Train:")
     r1 =  calculate_scores(query_features, reference_features, query_labels, reference_labels, step_size=step_size, ranks=ranks) 
@@ -63,8 +64,6 @@ def calc_sim(config,
         gc.collect()
         
     return r1, near_dict
-
-
 
 
 def calculate_scores(query_features, reference_features, query_labels, reference_labels, step_size=1000, ranks=[1,5,10]):
