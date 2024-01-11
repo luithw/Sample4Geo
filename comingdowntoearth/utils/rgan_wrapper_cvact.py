@@ -62,6 +62,7 @@ class RGANWrapper(BaseModel):
         self.optimizer_R.zero_grad()
 
         self.fake_street_out, self.street_out = self.retrieval(self.street, self.residual.detach())
+
         self.r_loss = self.infoNCE(self.fake_street_out, self.street_out, self.logit_scale)
 
     def backward_G(self):
@@ -87,7 +88,8 @@ class RGANWrapper(BaseModel):
             self.backward_D()
         self.scaler_D.scale(self.d_loss).backward()
         self.scaler_D.unscale_(self.optimizer_D)
-        torch.nn.utils.clip_grad_value_(self.discriminator.parameters(), self.clip_grad)
+        # torch.nn.utils.clip_grad_value_(self.discriminator.parameters(), self.clip_grad)
+        torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), self.clip_grad)
         self.scaler_D.step(self.optimizer_D)
         self.scaler_D.update()
         if self.scheduler_D is not None:
@@ -100,7 +102,8 @@ class RGANWrapper(BaseModel):
             self.backward_R()
         self.scaler_R.scale(self.r_loss).backward()
         self.scaler_R.unscale_(self.optimizer_R)
-        torch.nn.utils.clip_grad_value_(self.retrieval.parameters(), self.clip_grad)
+        # torch.nn.utils.clip_grad_value_(self.retrieval.parameters(), self.clip_grad)
+        torch.nn.utils.clip_grad_norm_(self.retrieval.parameters(), self.clip_grad)
         self.scaler_R.step(self.optimizer_R)
         self.scaler_R.update()
         if self.scheduler_R is not None:
@@ -112,7 +115,8 @@ class RGANWrapper(BaseModel):
             self.backward_G()
         self.scaler_G.scale(self.g_loss).backward()
         self.scaler_G.unscale_(self.optimizer_G)
-        torch.nn.utils.clip_grad_value_(self.generator.parameters(), self.clip_grad)
+        # torch.nn.utils.clip_grad_value_(self.generator.parameters(), self.clip_grad)
+        torch.nn.utils.clip_grad_norm_(self.generator.parameters(), self.clip_grad)
         self.scaler_G.step(self.optimizer_G)
         self.scaler_G.update()
         if self.scheduler_G is not None:

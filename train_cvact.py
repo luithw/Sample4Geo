@@ -74,14 +74,15 @@ class Configuration:
     
     # Augment Images
     # prob_rotate: float = 0.75          # rotates the sat image and ground images simultaneously
+    # prob_flip: float = 0.5             # flipping the sat image and ground images simultaneously
     prob_rotate: float = 0          # rotates the sat image and ground images simultaneously
-    prob_flip: float = 0.5             # flipping the sat image and ground images simultaneously
+    prob_flip: float = 0             # flipping the sat image and ground images simultaneously
 
     # Savepath for model checkpoints
     model_path: str = "./cvact"
     
     # Eval before training
-    zero_shot: bool = False
+    zero_shot: bool = True
     
     # Checkpoint to start from
     checkpoint_start = None
@@ -403,7 +404,8 @@ if __name__ == '__main__':
                            query_dataloader=query_dataloader_val,
                            ranks=[1, 5, 10],
                            step_size=1000,
-                           cleanup=True)
+                           cleanup=True,
+                           model_path=model_path)
         
         if config.sim_sample:
             r1_train, sim_dict = calc_sim(config=config,

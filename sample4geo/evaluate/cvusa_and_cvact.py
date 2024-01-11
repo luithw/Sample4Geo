@@ -1,10 +1,17 @@
+import os
 import time
 import torch
 import numpy as np
 from tqdm import tqdm
 import gc
 import copy
+
+import matplotlib
+# matplotlib.use('Agg')
+from matplotlib import pyplot as plt
+
 from ..trainer import predict, predict_duo
+
 
 
 def evaluate(config,
@@ -13,12 +20,24 @@ def evaluate(config,
              query_dataloader, 
              ranks=[1, 5, 10],
              step_size=1000,
-             cleanup=True):
+             cleanup=True,
+             model_path=None):
     
     
     print("\nExtract Features:")
     if config.coming2earth:
         query_features, query_labels, reference_features, reference_labels = predict_duo(config, model, query_dataloader, reference_dataloader)
+        if model_path:
+            # plot all the images in the batch in as subfigure in the same figure and save as png in the model_path
+            n_rows =  model.fake_street.shape[0] // 4
+            fig, axes = plt.subplots(4, n_rows, figsize=(5 * n_rows, 8))
+            imgs = model.fake_street.permute(0,2,3,1).cpu().detach().numpy().astype(np.float32) * 0.5 + 0.5
+            # cast to float32
+            for i in range(model.fake_street.shape[0]):
+                axes[i // n_rows, i % n_rows].imshow(imgs[i])
+                axes[i // n_rows, i % n_rows].axis('off')
+            plt.tight_layout()
+            fig.savefig(os.path.join(model_path, 'fake_street.png'))
     else:
         reference_features, reference_labels = predict(config, model, reference_dataloader)
         query_features, query_labels = predict(config, model, query_dataloader)

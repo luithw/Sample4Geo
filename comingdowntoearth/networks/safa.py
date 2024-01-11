@@ -32,34 +32,58 @@ class SAFA(nn.Module):
     def __init__(self, sa_num=8, H1=112, W1=616, H2=112, W2=616):
         super().__init__()
 
-        # self.extract2 = backbones.ResNet34()
-        self.extract2 = timm.create_model('convnext_base.fb_in22k_ft_in1k_384', pretrained=True, num_classes=0)
-        self.extract1 = nn.Linear(2048, 1024)
+        self.extract2 = backbones.ResNet34()
+        # self.extract2 = timm.create_model('convnext_base.fb_in22k_ft_in1k_384', pretrained=True, num_classes=0)
+        # self.extract1 = nn.Linear(2048, 1024)
 
         in_dim1 = (H1 // 8) * (W1 // 8)
         in_dim2 = (H2 // 8) * (W2 // 8)
         self.sa1 = SA(in_dim1, sa_num)
-        # self.sa2 = SA(in_dim2, sa_num)
+        self.sa2 = SA(in_dim2, sa_num)
+
+    # With timm model
+    # def forward(self, im2, res1):
+    #     # Local feature extraction
+    #     f2 = self.extract2(im2)
+    #     B, C, _, _ = res1.shape
+    #     f1 = res1.view(B, C, -1)
+    #     # f2 = f2.view(B, C, -1)
+    #
+    #     # Spatial aware attention
+    #     w1 = self.sa1(f1)
+    #     # w2 = self.sa2(f2)
+    #
+    #     # Global feature aggregation
+    #     f1 = torch.matmul(f1, w1).view(B, -1)
+    #     # f2 = torch.matmul(f2, w2).view(B, -1)
+    #     # Make f1 and f2 the same dimension
+    #     f1 = self.extract1(f1)
+    #
+    #     # Feature reduction
+    #     f1 = F.normalize(f1, p=2, dim=1)
+    #     f2 = F.normalize(f2, p=2, dim=1)
+    #     return f1, f2
 
     def forward(self, im2, res1):
         # Local feature extraction
         f2 = self.extract2(im2)
         B, C, _, _ = res1.shape
         f1 = res1.view(B, C, -1)
-        # f2 = f2.view(B, C, -1)
+        f2 = f2.view(B, C, -1)
 
         # Spatial aware attention
         w1 = self.sa1(f1)
-        # w2 = self.sa2(f2)
+        w2 = self.sa2(f2)
 
         # Global feature aggregation
         f1 = torch.matmul(f1, w1).view(B, -1)
-        # f2 = torch.matmul(f2, w2).view(B, -1)
+        f2 = torch.matmul(f2, w2).view(B, -1)
         # Make f1 and f2 the same dimension
-        f1 = self.extract1(f1)
+        # f1 = self.extract1(f1)
 
         # Feature reduction
         f1 = F.normalize(f1, p=2, dim=1)
         f2 = F.normalize(f2, p=2, dim=1)
         return f1, f2
+
 
