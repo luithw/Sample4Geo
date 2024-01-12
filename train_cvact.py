@@ -82,7 +82,7 @@ class Configuration:
     model_path: str = "./cvact"
     
     # Eval before training
-    zero_shot: bool = True
+    zero_shot: bool = False
     
     # Checkpoint to start from
     checkpoint_start = None
@@ -457,7 +457,8 @@ if __name__ == '__main__':
                                query_dataloader=query_dataloader_val, 
                                ranks=[1, 5, 10],
                                step_size=1000,
-                               cleanup=True)
+                               cleanup=True,
+                               model_path=model_path)
             
             if config.sim_sample:
                 r1_train, sim_dict = calc_sim(config=config,
@@ -537,4 +538,5 @@ if __name__ == '__main__':
                        query_dataloader=query_dataloader_test, 
                        ranks=[1, 5, 10],
                        step_size=1000,
-                       cleanup=True)
+                       cleanup=True,
+                       model_path=model_path)
